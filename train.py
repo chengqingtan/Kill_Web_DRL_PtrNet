@@ -11,6 +11,7 @@ from critic import PtrNet2
 from env import Env_tsp
 from config import Config, load_pkl, pkl_parser
 from data import Generator
+from env_killweb import Env_Kill_Web
 
 # torch.autograd.set_detect_anomaly(True)
 torch.backends.cudnn.benchmark = True
@@ -23,6 +24,7 @@ def train_model(cfg, env, log_path = None):
 		with open(param_path, 'w') as f:
 			f.write(''.join('%s,%s\n'%item for item in vars(cfg).items()))
 
+	print("create actor model.")
 	act_model = PtrNet1(cfg)
 	if cfg.optim == 'Adam':
 		act_optim = optim.Adam(act_model.parameters(), lr = cfg.lr)
@@ -30,9 +32,11 @@ def train_model(cfg, env, log_path = None):
 		act_lr_scheduler = optim.lr_scheduler.StepLR(act_optim, 
 						step_size=cfg.lr_decay_step, gamma=cfg.lr_decay)
 	device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+	print(f"use device: {device}")
 	act_model = act_model.to(device)
 
 	if cfg.mode == 'train':
+		print("create critic model.")
 		cri_model = PtrNet2(cfg)
 		if cfg.optim == 'Adam':
 			cri_optim = optim.Adam(cri_model.parameters(), lr = cfg.lr)
@@ -44,18 +48,19 @@ def train_model(cfg, env, log_path = None):
 
 	mse_loss = nn.MSELoss()
 	dataset = Generator(cfg, env)
-	dataloader = DataLoader(dataset, batch_size = cfg.batch, shuffle = True)
+	dataloader = DataLoader(dataset, batch_size = cfg.batch, shuffle = False)
 
 	ave_act_loss, ave_L = 0., 0.
 	min_L, cnt = 1e7, 0
 	t1 = time()
 	# for i, inputs in tqdm(enumerate(dataloader)):
-	for i, inputs in enumerate(dataloader):
+	print("=====start training=====")
+	for i, (inputs, red_device) in enumerate(dataloader):
 		inputs = inputs.to(device)
-		pred_tour, ll = act_model(inputs, device)
-		real_l = env.stack_l_fast(inputs, pred_tour)
+		pred_tour, ll = act_model(inputs, red_device)
+		real_l = env.cal_distance(inputs, red_device, pred_tour)
 		if cfg.mode == 'train':
-			pred_l = cri_model(inputs, device)
+			pred_l = cri_model(inputs)
 			cri_loss = mse_loss(pred_l, real_l.detach())
 			cri_optim.zero_grad()
 			cri_loss.backward()
@@ -86,7 +91,7 @@ def train_model(cfg, env, log_path = None):
 		
 		if i % cfg.log_step == 0:
 			t2 = time()
-			if cfg.mode == 'train':	
+			if cfg.mode == 'train':
 				print('step:%d/%d, actic loss:%1.3f, critic loss:%1.3f, L:%1.3f, %dmin%dsec'%(i, cfg.steps, ave_act_loss/(i+1), ave_cri_loss/(i+1), ave_L/(i+1), (t2-t1)//60, (t2-t1)%60))
 				if cfg.islogger:
 					if log_path is None:
@@ -96,7 +101,7 @@ def train_model(cfg, env, log_path = None):
 					else:
 						with open(log_path, 'a') as f:
 							f.write('%d,%1.4f,%1.4f,%1.4f,%dmin%dsec\n'%(i, ave_act_loss/(i+1), ave_cri_loss/(i+1), ave_L/(i+1), (t2-t1)//60, (t2-t1)%60))
-			
+
 			elif cfg.mode == 'train_emv':
 				print('step:%d/%d, actic loss:%1.3f, L:%1.3f, %dmin%dsec'%(i, cfg.steps, ave_act_loss/(i+1), ave_L/(i+1), (t2-t1)//60, (t2-t1)%60))
 				if cfg.islogger:
@@ -107,26 +112,27 @@ def train_model(cfg, env, log_path = None):
 					else:
 						with open(log_path, 'a') as f:
 							f.write('%d,%1.4f,%1.4f,%dmin%dsec\n'%(i, ave_act_loss/(i+1), ave_L/(i+1), (t2-t1)//60, (t2-t1)%60))
-			if(ave_L/(i+1) < min_L):
-				min_L = ave_L/(i+1)
-				
-			else:
-				cnt += 1
-				print(f'cnt: {cnt}/20')
-				if(cnt >= 20):
-					print('early stop, average cost cant decrease anymore')
-					if log_path is not None:
-						with open(log_path, 'a') as f:
-							f.write('\nearly stop')
-					break
+			# if(ave_L/(i+1) < min_L):
+			# 	min_L = ave_L/(i+1)
+			#
+			# else:
+			# 	cnt += 1
+			# 	print(f'cnt: {cnt}/20')
+			# 	if(cnt >= 20):
+			# 		print('early stop, average cost cant decrease anymore')
+			# 		if log_path is not None:
+			# 			with open(log_path, 'a') as f:
+			# 				f.write('\nearly stop')
+			# 		break
 			t1 = time()
+	print("=====end training=====")
 	if cfg.issaver:		
 		torch.save(act_model.state_dict(), cfg.model_dir + '%s_%s_step%d_act.pt'%(cfg.task, date, i))#'cfg.model_dir = ./Pt/'
 		print('save model...')
 
 if __name__ == '__main__':
 	cfg = load_pkl(pkl_parser().path)
-	env = Env_tsp(cfg)
+	env = Env_Kill_Web(cfg)
 
 	if cfg.mode in ['train', 'train_emv']:
 		# train_emv --> exponential moving average, not use critic model

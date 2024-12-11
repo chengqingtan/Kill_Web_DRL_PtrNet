@@ -76,7 +76,7 @@ class PtrNet1(nn.Module):
 		# (self.embed, ) to (batch, 1, self.embed)
 		# dec_input = self.dec_input.unsqueeze(0).repeat(batch,1).unsqueeze(1).to(device)
 		dec_input = self.Embedding(decode_input)  # (batch, 1, 17) to (batch, 1, self.embed)
-		for i in range(city_t):
+		for i in range(3):
 			_, (h, c) = self.Decoder(dec_input, (h, c))
 			query = h.squeeze(0)
 			for i in range(self.n_glimpse):

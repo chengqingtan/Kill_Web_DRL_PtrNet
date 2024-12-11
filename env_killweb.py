@@ -48,19 +48,19 @@ class Env_Kill_Web():
         n_channel = torch.zeros(size=(self.n_red_device, 4), dtype=torch.int)
         return torch.cat([side, type, capability, ltr, n_channel], dim=-1)
 
-    def stack_blue_nodes(self, seed=None):
+    def stack_blue_nodes(self, n_samples, seed=None):
         """
-        return nodes: (batch, n_blue_device, 17)
+        return nodes: (n_samples, n_blue_device, 17)
         """
-        list = [self.get_blue_nodes() for _ in range(self.batch)]
+        list = [self.get_blue_nodes() for _ in range(n_samples)]
         inputs = torch.stack(list, dim=0)
         return inputs
 
-    def stack_red_nodes(self, seed=None):
+    def stack_red_nodes(self, n_samples, seed=None):
         """
-        return nodes: (batch, n_blue_device, 17)
+        return nodes: (n_samples, n_blue_device, 17)
         """
-        list = [self.get_red_nodes() for _ in range(self.batch)]
+        list = [self.get_red_nodes() for _ in range(n_samples)]
         inputs = torch.stack(list, dim=0)
         return inputs
 

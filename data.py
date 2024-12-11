@@ -23,6 +23,7 @@ if __name__ == '__main__':
 	env = Env_Kill_Web(cfg)
 	dataset = Generator(cfg, env)
 	blue_device, red_device = next(iter(dataset))
+	print(f"len(dataset): {len(dataset)}, batch size: {cfg.batch}")
 	print(f"blue_device.size(): {blue_device.size()}, red_device.size(): {red_device.size()}")
 	
 	device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
