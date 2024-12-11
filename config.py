@@ -57,7 +57,7 @@ class Config():
 		for k, v in kwargs.items():
 			self.__dict__[k] = v
 		self.dump_date = datetime.now().strftime('%m%d_%H_%M')
-		self.task = '%s%d'%(self.mode, self.city_t)
+		self.task = '%s%d_%d'%(self.mode, self.n_blue_device, self.n_red_device)
 		self.pkl_path = self.pkl_dir + '%s.pkl'%(self.task)
 		self.n_samples = self.batch * self.steps
 		for x in [self.log_dir, self.model_dir, self.pkl_dir]:
