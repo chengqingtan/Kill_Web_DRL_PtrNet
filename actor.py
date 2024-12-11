@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from config import Config, load_pkl, pkl_parser
-from env import Env_tsp
 from env_killweb import Env_Kill_Web
 
 class Greedy(nn.Module):
@@ -44,7 +43,7 @@ class PtrNet1(nn.Module):
 		self.W_ref = nn.Conv1d(cfg.hidden, cfg.hidden, 1, 1)
 		self.W_q2 = nn.Linear(cfg.hidden, cfg.hidden, bias = True)
 		self.W_ref2 = nn.Conv1d(cfg.hidden, cfg.hidden, 1, 1)
-		# self.dec_input = nn.Parameter(torch.FloatTensor(cfg.embed))
+		self.dec_input = nn.Parameter(torch.FloatTensor(cfg.embed))
 		self._initialize_weights(cfg.init_min, cfg.init_max)
 		self.clip_logits = cfg.clip_logits
 		self.softmax_T = cfg.softmax_T
@@ -55,10 +54,10 @@ class PtrNet1(nn.Module):
 		for param in self.parameters():
 			nn.init.uniform_(param.data, init_min, init_max)
 		
-	def forward(self, x, decode_input):
+	def forward(self, x, red_device):
 		'''
 			x: (batch, n_blue_device, 17)
-			decode_input: (batch, 1, 17)
+			red_device: (batch, 1, 17)
 			enc_h: (batch, n_blue_device, embed)
 			dec_input: (batch, 1, embed)
 			h: (1, batch, embed)
@@ -75,7 +74,7 @@ class PtrNet1(nn.Module):
 		pi_list, log_ps = [], []
 		# (self.embed, ) to (batch, 1, self.embed)
 		# dec_input = self.dec_input.unsqueeze(0).repeat(batch,1).unsqueeze(1).to(device)
-		dec_input = self.Embedding(decode_input)  # (batch, 1, 17) to (batch, 1, self.embed)
+		dec_input = self.Embedding(red_device)  # (batch, 1, 17) to (batch, 1, self.embed)
 		for i in range(3):
 			_, (h, c) = self.Decoder(dec_input, (h, c))
 			query = h.squeeze(0)
@@ -166,9 +165,6 @@ if __name__ == '__main__':
 
 	cfg.batch = 3
 	env = Env_Kill_Web(cfg)
-	# env = Env_Kill_Web(cfg)
-	cost = env.cal_distance(blue_device_inputs, red_device_input, pi)
-	print('cost:', cost.size(), cost)
 	cost = env.cal_distance(blue_device_inputs, red_device_input, pi)
 	print('cost:', cost.size(), cost)
 	

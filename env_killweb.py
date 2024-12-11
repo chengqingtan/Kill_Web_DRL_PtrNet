@@ -48,21 +48,56 @@ class Env_Kill_Web():
         n_channel = torch.zeros(size=(self.n_red_device, 4), dtype=torch.int)
         return torch.cat([side, type, capability, ltr, n_channel], dim=-1)
 
-    def stack_blue_nodes(self, n_samples, seed=None):
+    def stack_blue_nodes(self, seed=None):
         """
         return nodes: (n_samples, n_blue_device, 17)
         """
-        list = [self.get_blue_nodes() for _ in range(n_samples)]
+        list = [self.get_blue_nodes() for _ in range(self.batch)]
         inputs = torch.stack(list, dim=0)
         return inputs
 
-    def stack_red_nodes(self, n_samples, seed=None):
+    def stack_red_nodes(self, seed=None):
         """
         return nodes: (n_samples, n_blue_device, 17)
         """
-        list = [self.get_red_nodes() for _ in range(n_samples)]
+        list = [self.get_red_nodes() for _ in range(self.batch)]
         inputs = torch.stack(list, dim=0)
         return inputs
+
+    def get_batch_blue_device(self, n_samples, seed=None):
+        """
+        return nodes: (n_samples, n_blue_device, 17)
+        """
+        if seed is not None:
+            torch.manual_seed(seed)
+        side = torch.zeros(size=(n_samples, self.n_blue_device, 1), dtype=torch.int)
+        type = torch.randint(0, 2, size=(n_samples, self.n_blue_device, 3), dtype=torch.int)
+        clt = torch.rand(size=(n_samples, self.n_blue_device, 8), dtype=torch.float32)
+        radius = torch.zeros(size=(n_samples, self.n_blue_device, 1), dtype=torch.float32)
+        n_channel = torch.randint(1, 10, size=(n_samples, self.n_blue_device, 4), dtype=torch.int)
+        return torch.cat([side, type, clt, radius, n_channel], dim=-1)
+
+    # def get_batch_blue_device(self, n_samples, seed=None):
+    #     """
+    #     return nodes: (n_samples, n_blue_device, 3)
+    #     """
+    #     if seed is not None:
+    #         torch.manual_seed(seed)
+    #     return torch.rand(size=(n_samples, self.n_blue_device, 3), dtype=torch.float32)
+
+    def get_batch_red_device(self, n_samples, seed=None):
+        """
+        return nodes: (n_samples, n_red_device, 17)
+        """
+        if seed is not None:
+            torch.manual_seed(seed)
+        side = torch.ones(size=(n_samples, self.n_red_device, 1), dtype=torch.int)
+        type = torch.zeros(size=(n_samples, self.n_red_device, 3), dtype=torch.int)
+        capability = torch.zeros(size=(n_samples, self.n_red_device, 4), dtype=torch.float32)
+        ltr = torch.rand(size=(n_samples, self.n_red_device, 5), dtype=torch.float32)
+        n_channel = torch.zeros(size=(n_samples, self.n_red_device, 4), dtype=torch.int)
+        return torch.cat([side, type, capability, ltr, n_channel], dim=-1)
+
 
     def get_random_solution(self, nodes):
         """
@@ -95,13 +130,20 @@ class Env_Kill_Web():
         inputs: (batch, n_blue_devices, 17), 蓝方设备
         red_device: (batch, 1, 17), 红方设备
         tours: (batch, 3), 预测路径
-        d: (batch, 3, 3) to (batch, 4, 3)
+        d1: (batch, 3, 3)
+        d2: (batch, 1, 3)
+        d: (batch, 4, 3)
         """
         d1 = torch.gather(input=inputs[:, :, 8:11], dim=1, index=tours[:, :, None].repeat(1, 1, 3))
-        d2 = red_device[:, :, 8:11]
-        d = torch.cat([d1, d2], dim=1)
+        # d2 = red_device[:, :, 8:11]
+        # d = torch.cat([d1, d2], dim=1)
+        d = d1
         return (torch.sum((d[:, 1:] - d[:, :-1]).norm(p=2, dim=2), dim=1)
                 + (d[:, 0] - d[:, -1]).norm(p=2, dim=1))  # distance from last node to first selected node)
+
+        # d = torch.gather(input=inputs, dim=1, index=tours[:, :, None].repeat(1, 1, 3))
+        # return (torch.sum((d[:, 1:] - d[:, :-1]).norm(p=2, dim=2), dim=1)
+        #         + (d[:, 0] - d[:, -1]).norm(p=2, dim=1))  # distance from last node to first selected node)
 
 
 

@@ -9,8 +9,8 @@ from config import Config, load_pkl, pkl_parser
 
 class Generator(Dataset):
 	def __init__(self, cfg, env: Env_Kill_Web):
-		self.blue_device = env.stack_blue_nodes(cfg.n_samples)
-		self.red_device = env.stack_red_nodes(cfg.n_samples)
+		self.blue_device = env.get_batch_blue_device(cfg.n_samples)
+		self.red_device = env.get_batch_red_device(cfg.n_samples)
 
 	def __getitem__(self, idx):
 		return self.blue_device[idx], self.red_device[idx]

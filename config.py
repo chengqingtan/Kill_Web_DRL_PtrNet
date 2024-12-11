@@ -8,9 +8,9 @@ def argparser():
 	parser = argparse.ArgumentParser()
 	# main parts
 	parser.add_argument('-m', '--mode', metavar = 'M', type = str, required = True, choices = ['train', 'train_emv', 'test'], help = 'train or train_emv or test')
-	parser.add_argument('-b', '--batch', metavar = 'B', type = int, default = 512, help = 'batch size, default: 512')
+	parser.add_argument('-b', '--batch', metavar = 'B', type = int, default = 128, help = 'batch size, default: 512')
 	parser.add_argument('-t', '--city_t', metavar = 'T', type = int, default = 20, help = 'number of cities(nodes), time sequence, default: 20')
-	parser.add_argument('-s', '--steps', metavar = 'S', type = int, default = 15000, help = 'training steps(epochs), default: 15000')
+	parser.add_argument('-s', '--steps', metavar = 'S', type = int, default = 5000, help = 'training steps(epochs), default: 15000')
 
 	# kill web params
 	parser.add_argument('--n_blue_device', metavar='NBD', type=int, default=60, help='蓝方(我方)装备的数量, default: 60')

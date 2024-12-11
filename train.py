@@ -57,10 +57,12 @@ def train_model(cfg, env, log_path = None):
 	print("=====start training=====")
 	for i, (inputs, red_device) in enumerate(dataloader):
 		inputs = inputs.to(device)
-		pred_tour, ll = act_model(inputs, red_device)
-		real_l = env.cal_distance(inputs, red_device, pred_tour)
+		red_device = red_device.to(device)
+		pred_tour, ll = act_model(inputs, red_device[:, 0:1, :])
+		real_l = env.cal_distance(inputs, red_device[:, 0:1, :], pred_tour)
 		if cfg.mode == 'train':
 			pred_l = cri_model(inputs)
+			# pred_l = cri_model(torch.cat([inputs, red_device[:, 0:1, :]], dim=1))
 			cri_loss = mse_loss(pred_l, real_l.detach())
 			cri_optim.zero_grad()
 			cri_loss.backward()
@@ -124,10 +126,10 @@ def train_model(cfg, env, log_path = None):
 			# 			with open(log_path, 'a') as f:
 			# 				f.write('\nearly stop')
 			# 		break
-			t1 = time()
+			# t1 = time()
 	print("=====end training=====")
 	if cfg.issaver:		
-		torch.save(act_model.state_dict(), cfg.model_dir + '%s_%s_step%d_act.pt'%(cfg.task, date, i))#'cfg.model_dir = ./Pt/'
+		torch.save(act_model.state_dict(), cfg.model_dir + '%s_%s_step%d_act.pt'%(cfg.task, date, i + 1))#'cfg.model_dir = ./Pt/'
 		print('save model...')
 
 if __name__ == '__main__':
