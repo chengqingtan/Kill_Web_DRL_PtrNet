@@ -6,13 +6,17 @@ from config import Config, load_pkl, pkl_parser
 class PtrNet2(nn.Module):
 	def __init__(self, cfg):
 		super().__init__()
-		self.Embedding = nn.Linear(2, cfg.embed, bias = False)
+		self.Embedding = nn.Linear(17, cfg.embed, bias = False)
 		self.Encoder = nn.LSTM(input_size = cfg.embed, hidden_size = cfg.hidden, batch_first = True)
 		self.Decoder = nn.LSTM(input_size = cfg.embed, hidden_size = cfg.hidden, batch_first = True)
-		if torch.cuda.is_available():
-			self.Vec = nn.Parameter(torch.cuda.FloatTensor(cfg.embed))
-		else:
-			self.Vec = nn.Parameter(torch.FloatTensor(cfg.embed))
+		# if torch.cuda.is_available():
+		# 	self.Vec = nn.Parameter(torch.cuda.FloatTensor(cfg.embed))
+		# else:
+		# 	self.Vec = nn.Parameter(torch.FloatTensor(cfg.embed))
+		device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+		self.Vec = nn.Parameter(torch.empty(size=(cfg.embed, ), dtype=torch.float32, device=device))
+		nn.init.normal_(self.Vec)
+
 		self.W_q = nn.Linear(cfg.hidden, cfg.hidden, bias = True)
 		self.W_ref = nn.Conv1d(cfg.hidden, cfg.hidden, 1, 1)
 		# self.dec_input = nn.Parameter(torch.FloatTensor(cfg.embed))
@@ -28,13 +32,14 @@ class PtrNet2(nn.Module):
 		for param in self.parameters():
 			nn.init.uniform_(param.data, init_min, init_max)
 			
-	def forward(self, x, device):
-		'''	x: (batch, city_t, 2)
-			enc_h: (batch, city_t, embed)
+	def forward(self, x):
+		'''	x: (batch, n_blue_device, 17)
+			enc_h: (batch, n_blue_device, embed)
 			query(Decoder input): (batch, 1, embed)
 			h: (1, batch, embed)
 			return: pred_l: (batch)
 		'''
+		device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 		x = x.to(device)
 		batch, city_t, xy = x.size()
 		embed_enc_inputs = self.Embedding(x)
@@ -83,10 +88,10 @@ class PtrNet2(nn.Module):
 if __name__ == '__main__':
 	cfg = load_pkl(pkl_parser().path)
 	model = PtrNet2(cfg)
-	inputs = torch.randn(3,20,2)
+	inputs = torch.randn(3,60,17)
 	device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')	
 	model = model.to(device)
-	pred_l = model(inputs, device)	
+	pred_l = model(inputs)
 	print('pred_length:', pred_l.size(), pred_l)
 	
 	cnt = 0
@@ -95,5 +100,5 @@ if __name__ == '__main__':
 		cnt += torch.numel(k)	
 	print('total parameters:', cnt)
 
-	# pred_l.mean().backward()
-	# print(model.W_q.weight.grad)
+	pred_l.mean().backward()
+	print(model.W_q.weight.grad)

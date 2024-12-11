@@ -56,10 +56,10 @@ class PtrNet1(nn.Module):
 			nn.init.uniform_(param.data, init_min, init_max)
 		
 	def forward(self, x, decode_input):
-		'''	x: (batch, city_t, 2)
+		'''
 			x: (batch, n_blue_device, 17)
 			decode_input: (batch, 1, 17)
-			enc_h: (batch, city_t, embed)
+			enc_h: (batch, n_blue_device, embed)
 			dec_input: (batch, 1, embed)
 			h: (1, batch, embed)
 			return: pi: (batch, city_t), ll: (batch)
