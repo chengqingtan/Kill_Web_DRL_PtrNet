@@ -56,40 +56,44 @@ def train_model(cfg, env, log_path = None):
 	# for i, inputs in tqdm(enumerate(dataloader)):
 	print("=====start training=====")
 	for i, (inputs, red_device) in enumerate(dataloader):
-		inputs = inputs.to(device)
-		red_device = red_device.to(device)
-		pred_tour, ll = act_model(inputs, red_device[:, 0:1, :])
-		real_l = env.cal_distance(inputs, red_device[:, 0:1, :], pred_tour)
-		if cfg.mode == 'train':
-			pred_l = cri_model(inputs)
-			# pred_l = cri_model(torch.cat([inputs, red_device[:, 0:1, :]], dim=1))
-			cri_loss = mse_loss(pred_l, real_l.detach())
-			cri_optim.zero_grad()
-			cri_loss.backward()
-			nn.utils.clip_grad_norm_(cri_model.parameters(), max_norm = 1., norm_type = 2)
-			cri_optim.step()
+		for j in range(cfg.n_red_device):
+			# 对于每个敌方装备，都要构建一个作战环
+			inputs = inputs.to(device)
+			red_device = red_device.to(device)
+			pred_tour, ll = act_model(inputs, red_device[:, 0:1, :])
+			# 选择一个作战环后，需要更新inputs的状态
+			# TODO: 根据 pred_tour 更新 inputs
+			real_l = env.cal_distance(inputs, red_device[:, 0:1, :], pred_tour)
+			if cfg.mode == 'train':
+				pred_l = cri_model(inputs)
+				# pred_l = cri_model(torch.cat([inputs, red_device[:, 0:1, :]], dim=1))
+				cri_loss = mse_loss(pred_l, real_l.detach())
+				cri_optim.zero_grad()
+				cri_loss.backward()
+				nn.utils.clip_grad_norm_(cri_model.parameters(), max_norm = 1., norm_type = 2)
+				cri_optim.step()
+				if cfg.is_lr_decay:
+					cri_lr_scheduler.step()
+			elif cfg.mode == 'train_emv':
+				if i == 0:
+					L = real_l.detach().mean()
+				else:
+					L = (L * 0.9) + (0.1 * real_l.detach().mean())
+				pred_l = L
+
+			adv = real_l.detach() - pred_l.detach()
+			act_loss = (adv * ll).mean()
+			act_optim.zero_grad()
+			act_loss.backward()
+			nn.utils.clip_grad_norm_(act_model.parameters(), max_norm = 1., norm_type = 2)
+			act_optim.step()
 			if cfg.is_lr_decay:
-				cri_lr_scheduler.step()
-		elif cfg.mode == 'train_emv':
-			if i == 0:
-				L = real_l.detach().mean()
-			else:
-				L = (L * 0.9) + (0.1 * real_l.detach().mean())
-			pred_l = L
+				act_lr_scheduler.step()
 
-		adv = real_l.detach() - pred_l.detach()
-		act_loss = (adv * ll).mean()
-		act_optim.zero_grad()
-		act_loss.backward()
-		nn.utils.clip_grad_norm_(act_model.parameters(), max_norm = 1., norm_type = 2)
-		act_optim.step()
-		if cfg.is_lr_decay:
-			act_lr_scheduler.step()
-
-		ave_act_loss += act_loss.item()
-		if cfg.mode == 'train':
-			ave_cri_loss += cri_loss.item()
-		ave_L += real_l.mean().item()
+			ave_act_loss += act_loss.item()
+			if cfg.mode == 'train':
+				ave_cri_loss += cri_loss.item()
+			ave_L += real_l.mean().item()
 		
 		if i % cfg.log_step == 0:
 			t2 = time()

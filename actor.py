@@ -26,13 +26,7 @@ class PtrNet1(nn.Module):
 		self.Embedding = nn.Linear(17, cfg.embed, bias = False)
 		self.Encoder = nn.LSTM(input_size = cfg.embed, hidden_size = cfg.hidden, batch_first = True)
 		self.Decoder = nn.LSTM(input_size = cfg.embed, hidden_size = cfg.hidden, batch_first = True)
-		# if torch.cuda.is_available():
-		# 	self.Vec = nn.Parameter(torch.cuda.FloatTensor(cfg.embed))
-		# 	self.Vec2 = nn.Parameter(torch.cuda.FloatTensor(cfg.embed))
-		#
-		# else:
-		# 	self.Vec = nn.Parameter(torch.FloatTensor(cfg.embed))
-		# 	self.Vec2 = nn.Parameter(torch.FloatTensor(cfg.embed))
+
 		device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 		self.Vec = nn.Parameter(torch.empty(size=(cfg.embed, ), dtype=torch.float32).to(device))
 		self.Vec2 = nn.Parameter(torch.empty(size=(cfg.embed, ), dtype=torch.float32).to(device))
@@ -43,7 +37,7 @@ class PtrNet1(nn.Module):
 		self.W_ref = nn.Conv1d(cfg.hidden, cfg.hidden, 1, 1)
 		self.W_q2 = nn.Linear(cfg.hidden, cfg.hidden, bias = True)
 		self.W_ref2 = nn.Conv1d(cfg.hidden, cfg.hidden, 1, 1)
-		self.dec_input = nn.Parameter(torch.FloatTensor(cfg.embed))
+		# self.dec_input = nn.Parameter(torch.FloatTensor(cfg.embed))
 		self._initialize_weights(cfg.init_min, cfg.init_max)
 		self.clip_logits = cfg.clip_logits
 		self.softmax_T = cfg.softmax_T
@@ -65,10 +59,11 @@ class PtrNet1(nn.Module):
 		'''
 		device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 		x = x.to(device)
-		batch, city_t, _ = x.size()
+		batch, n_blue_device, _ = x.size()
 		embed_enc_inputs = self.Embedding(x)
 		embed = embed_enc_inputs.size(2)
-		mask = torch.zeros((batch, city_t), device = device)
+		# 掩码，防止选择重复的装备
+		mask = torch.zeros((batch, n_blue_device), device = device)
 		enc_h, (h, c) = self.Encoder(embed_enc_inputs, None)
 		ref = enc_h
 		pi_list, log_ps = [], []
@@ -76,18 +71,35 @@ class PtrNet1(nn.Module):
 		# dec_input = self.dec_input.unsqueeze(0).repeat(batch,1).unsqueeze(1).to(device)
 		dec_input = self.Embedding(red_device)  # (batch, 1, 17) to (batch, 1, self.embed)
 		for i in range(3):
+			# TODO: 计算掩码mask2，以屏蔽不满足要求的装备
+			# mask2: [batch, n_blue_device]
+			mask2 = torch.zeros((batch, n_blue_device), device = device)
+			if i == 0:
+				# 屏蔽非侦察设备 或 侦察通道为0的设备 以及 通信通道为0的设备
+				mask2 = ((x[:, :, 1] == 0) | (x[:, :, 13] == 0) | (x[:, :, 16] == 0)).float().to(device)
+			elif i == 1:
+				# 屏蔽非指控设备 或 指控通道为0的设备
+				mask2 = ((x[:, :, 2] == 0) | (x[:, :, 14] == 0)).float().to(device)
+			elif i == 2:
+				# 屏蔽非打击设备 或 打击通道为0的设备
+				mask2 = ((x[:, :, 3] == 0) | (x[:, :, 15] == 0)).float().to(device)
 			_, (h, c) = self.Decoder(dec_input, (h, c))
 			query = h.squeeze(0)
+			# 合并掩码
+			combined_mask = ((mask > 0) | (mask2 > 0)).float()
 			for i in range(self.n_glimpse):
 				query = self.glimpse(query, ref, mask)
-			logits = self.pointer(query, ref, mask)	
+			logits = self.pointer(query, ref, mask)
+			# 将 logits 中 mask 为 1 的位置设置为负无穷
+			# logits = logits.masked_fill(combined_mask == 1, float('-inf'))
 			log_p = torch.log_softmax(logits, dim = -1)
 			next_node = self.city_selecter(log_p)
 			dec_input = torch.gather(input = embed_enc_inputs, dim = 1, index = next_node.unsqueeze(-1).unsqueeze(-1).repeat(1, 1, embed))
 			
 			pi_list.append(next_node)
 			log_ps.append(log_p)
-			mask += torch.zeros((batch,city_t), device = device).scatter_(dim = 1, index = next_node.unsqueeze(1), value = 1)
+			# 更新掩码屏蔽已选择的己方设备，没有选择的设备为0，选择的设备设为1
+			mask += torch.zeros((batch, n_blue_device), device = device).scatter_(dim = 1, index = next_node.unsqueeze(1), value = 1)
 			
 		pi = torch.stack(pi_list, dim = 1)
 		ll = self.get_log_likelihood(torch.stack(log_ps, 1), pi)
