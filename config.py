@@ -11,7 +11,11 @@ def argparser():
 	parser.add_argument('-b', '--batch', metavar = 'B', type = int, default = 512, help = 'batch size, default: 512')
 	parser.add_argument('-t', '--city_t', metavar = 'T', type = int, default = 20, help = 'number of cities(nodes), time sequence, default: 20')
 	parser.add_argument('-s', '--steps', metavar = 'S', type = int, default = 15000, help = 'training steps(epochs), default: 15000')
-	
+
+	# kill web params
+	parser.add_argument('--n_blue_device', metavar='NBD', type=int, default=60, help='蓝方(我方)装备的数量, default: 60')
+	parser.add_argument('--n_red_device', metavar='NRD', type=int, default=5, help='红方(敌方)装备的数量, default: 5')
+
 	# details
 	parser.add_argument('-e', '--embed', metavar = 'EM', type = int, default = 128, help = 'embedding size')
 	parser.add_argument('-hi', '--hidden', metavar = 'HI', type = int, default = 128, help = 'hidden size')
@@ -80,6 +84,7 @@ def load_pkl(pkl_path, verbose = True):
 	with open(pkl_path, 'rb') as f:
 		cfg = pickle.load(f)
 		if verbose:
+			print("打印cfg配置文件:")
 			print_cfg(cfg)
 		os.environ['CUDA_VISIBLE_DEVICE'] = cfg.cuda_dv
 	return cfg

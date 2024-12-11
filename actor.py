@@ -4,6 +4,7 @@ import torch.nn.functional as F
 
 from config import Config, load_pkl, pkl_parser
 from env import Env_tsp
+from env_killweb import Env_Kill_Web
 
 class Greedy(nn.Module):
 	def __init__(self):
@@ -23,20 +24,27 @@ class Categorical(nn.Module):
 class PtrNet1(nn.Module):
 	def __init__(self, cfg):
 		super().__init__()
-		self.Embedding = nn.Linear(2, cfg.embed, bias = False)
+		self.Embedding = nn.Linear(17, cfg.embed, bias = False)
 		self.Encoder = nn.LSTM(input_size = cfg.embed, hidden_size = cfg.hidden, batch_first = True)
 		self.Decoder = nn.LSTM(input_size = cfg.embed, hidden_size = cfg.hidden, batch_first = True)
-		if torch.cuda.is_available():
-			self.Vec = nn.Parameter(torch.cuda.FloatTensor(cfg.embed))
-			self.Vec2 = nn.Parameter(torch.cuda.FloatTensor(cfg.embed))
-		else:
-			self.Vec = nn.Parameter(torch.FloatTensor(cfg.embed))
-			self.Vec2 = nn.Parameter(torch.FloatTensor(cfg.embed))
+		# if torch.cuda.is_available():
+		# 	self.Vec = nn.Parameter(torch.cuda.FloatTensor(cfg.embed))
+		# 	self.Vec2 = nn.Parameter(torch.cuda.FloatTensor(cfg.embed))
+		#
+		# else:
+		# 	self.Vec = nn.Parameter(torch.FloatTensor(cfg.embed))
+		# 	self.Vec2 = nn.Parameter(torch.FloatTensor(cfg.embed))
+		device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+		self.Vec = nn.Parameter(torch.empty(size=(cfg.embed, ), dtype=torch.float32).to(device))
+		self.Vec2 = nn.Parameter(torch.empty(size=(cfg.embed, ), dtype=torch.float32).to(device))
+		nn.init.normal_(self.Vec)
+		nn.init.normal_(self.Vec2)
+
 		self.W_q = nn.Linear(cfg.hidden, cfg.hidden, bias = True)
 		self.W_ref = nn.Conv1d(cfg.hidden, cfg.hidden, 1, 1)
 		self.W_q2 = nn.Linear(cfg.hidden, cfg.hidden, bias = True)
 		self.W_ref2 = nn.Conv1d(cfg.hidden, cfg.hidden, 1, 1)
-		self.dec_input = nn.Parameter(torch.FloatTensor(cfg.embed))
+		# self.dec_input = nn.Parameter(torch.FloatTensor(cfg.embed))
 		self._initialize_weights(cfg.init_min, cfg.init_max)
 		self.clip_logits = cfg.clip_logits
 		self.softmax_T = cfg.softmax_T
@@ -47,13 +55,16 @@ class PtrNet1(nn.Module):
 		for param in self.parameters():
 			nn.init.uniform_(param.data, init_min, init_max)
 		
-	def forward(self, x, device):
+	def forward(self, x, decode_input):
 		'''	x: (batch, city_t, 2)
+			x: (batch, n_blue_device, 17)
+			decode_input: (batch, 1, 17)
 			enc_h: (batch, city_t, embed)
 			dec_input: (batch, 1, embed)
 			h: (1, batch, embed)
 			return: pi: (batch, city_t), ll: (batch)
 		'''
+		device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 		x = x.to(device)
 		batch, city_t, _ = x.size()
 		embed_enc_inputs = self.Embedding(x)
@@ -62,7 +73,9 @@ class PtrNet1(nn.Module):
 		enc_h, (h, c) = self.Encoder(embed_enc_inputs, None)
 		ref = enc_h
 		pi_list, log_ps = [], []
-		dec_input = self.dec_input.unsqueeze(0).repeat(batch,1).unsqueeze(1).to(device)
+		# (self.embed, ) to (batch, 1, self.embed)
+		# dec_input = self.dec_input.unsqueeze(0).repeat(batch,1).unsqueeze(1).to(device)
+		dec_input = self.Embedding(decode_input)  # (batch, 1, 17) to (batch, 1, self.embed)
 		for i in range(city_t):
 			_, (h, c) = self.Decoder(dec_input, (h, c))
 			query = h.squeeze(0)
@@ -134,8 +147,11 @@ class PtrNet1(nn.Module):
 if __name__ == '__main__':
 	cfg = load_pkl(pkl_parser().path)
 	model = PtrNet1(cfg)
-	inputs = torch.randn(3,20,2)	
-	pi, ll = model(inputs, device = 'cpu')	
+	device = torch.device("cuda:0" if torch.cuda.is_available() else 'cpu')
+	model = model.to(device)
+	blue_device_inputs = torch.randn(3,60,17, device=device)
+	red_device_input = torch.randn(3, 1, 17, device=device)
+	pi, ll = model(blue_device_inputs, red_device_input)
 	print('pi:', pi.size(), pi)
 	print('log_likelihood:', ll.size(), ll)
 
@@ -149,9 +165,10 @@ if __name__ == '__main__':
 	# print(model.W_q.weight.grad)
 
 	cfg.batch = 3
-	env = Env_tsp(cfg)
-	cost = env.stack_l(inputs, pi)
+	env = Env_Kill_Web(cfg)
+	# env = Env_Kill_Web(cfg)
+	cost = env.cal_distance(blue_device_inputs, red_device_input, pi)
 	print('cost:', cost.size(), cost)
-	cost = env.stack_l_fast(inputs, pi)
+	cost = env.cal_distance(blue_device_inputs, red_device_input, pi)
 	print('cost:', cost.size(), cost)
 	
